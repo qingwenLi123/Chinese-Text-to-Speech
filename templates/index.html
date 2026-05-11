@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>中文文本转语音</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 30px 20px;
+        }
+        .container {
+            background: #fff;
+            border-radius: 20px;
+            padding: 36px;
+            width: 100%;
+            max-width: 680px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 6px;
+            font-size: 26px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #888;
+            margin-bottom: 24px;
+            font-size: 13px;
+        }
+        /* 模式切换 */
+        .mode-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+            background: #f0f0f5;
+            padding: 4px;
+            border-radius: 12px;
+        }
+        .mode-tab {
+            flex: 1;
+            padding: 10px;
+            text-align: center;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s;
+            border: none;
+            background: transparent;
+        }
+        .mode-tab.active {
+            background: #fff;
+            color: #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        /* 文本输入 */
+        .form-group { margin-bottom: 20px; }
+        label {
+            display: block;
+            margin-bottom: 6px;
+            color: #555;
+            font-weight: 500;
+            font-size: 13px;
+        }
+        textarea {
+            width: 100%;
+            min-height: 160px;
+            padding: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 15px;
+            resize: vertical;
+            transition: border-color 0.3s;
+            font-family: inherit;
+            line-height: 1.7;
+        }
+        textarea:focus { outline: none; border-color: #667eea; }
+        .hint {
+            font-size: 12px;
+            color: #999;
+            margin-top: 6px;
+            line-height: 1.6;
+        }
+        .hint code {
+            background: #f0f0f5;
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-family: "Consolas", monospace;
+            color: #667eea;
+        }
+        /* 说话人配置 */
+        .speaker-config {
+            display: none;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f8f9ff;
+            border-radius: 12px;
+        }
+        .speaker-config.show { display: block; }
+        .speaker-config h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .speaker-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .speaker-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            background: #fff;
+            border-radius: 10px;
+            border: 1px solid #e0e0e8;
+        }
+        .speaker-name {
+            font-weight: 600;
+            color: #333;
+            min-width: 80px;
+        }
+        .speaker-voice select {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            background: #fff;
+        }
+        /* 音色选择（单段模式） */
+        .voice-options {
+            display: flex;
+            gap: 12px;
+        }
+        .voice-option {
+            flex: 1;
+            position: relative;
+        }
+        .voice-option input {
+            position: absolute;
+            opacity: 0;
+        }
+        .voice-option label {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-bottom: 0;
+        }
+        .voice-option input:checked + label {
+            border-color: #667eea;
+            background: #f0f2ff;
+            color: #667eea;
+        }
+        .voice-option .icon {
+            font-size: 26px;
+            margin-bottom: 4px;
+        }
+        .voice-option .name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        /* 按钮 */
+        .btn-generate {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn-generate:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+        .btn-generate:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+        /* 加载动画 */
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
+            color: #667eea;
+        }
+        .loading.show { display: block; }
+        .spinner {
+            display: inline-block;
+            width: 22px;
+            height: 22px;
+            border: 3px solid #e0e0e0;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        /* 结果 */
+        .result {
+            display: none;
+            margin-top: 22px;
+            padding: 18px;
+            background: #f8f9ff;
+            border-radius: 12px;
+        }
+        .result.show { display: block; }
+        .result audio {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        .btn-download {
+            display: inline-block;
+            width: 100%;
+            text-align: center;
+            padding: 11px;
+            background: #fff;
+            color: #667eea;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            text-decoration: none;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .btn-download:hover {
+            background: #667eea;
+            color: #fff;
+        }
+        .error {
+            display: none;
+            margin-top: 14px;
+            padding: 12px;
+            background: #fff0f0;
+            color: #c33;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        .error.show { display: block; }
+        .char-count {
+            text-align: right;
+            font-size: 12px;
+            color: #999;
+            margin-top: 4px;
+        }
+        /* 文件上传 */
+        .upload-area {
+            border: 2px dashed #d0d0e0;
+            border-radius: 12px;
+            padding: 30px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: #fafaff;
+        }
+        .upload-area:hover {
+            border-color: #667eea;
+            background: #f0f2ff;
+        }
+        .upload-area.dragover {
+            border-color: #667eea;
+            background: #e8ebff;
+        }
+        .upload-placeholder {
+            color: #888;
+            font-size: 14px;
+        }
+        /* 文件列表 */
+        .file-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            background: #fff;
+            border: 1px solid #e0e0e8;
+            border-radius: 10px;
+            cursor: move;
+        }
+        .file-item.dragging {
+            opacity: 0.5;
+        }
+        .file-index {
+            width: 24px;
+            height: 24px;
+            background: #667eea;
+            color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .file-name {
+            flex: 1;
+            font-size: 14px;
+            color: #333;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .file-size {
+            font-size: 12px;
+            color: #999;
+            flex-shrink: 0;
+        }
+        .file-remove {
+            background: #fff0f0;
+            color: #c33;
+            border: none;
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .file-remove:hover {
+            background: #ffdddd;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>中文文本转语音</h1>
+        <p class="subtitle">输入中文文本，一键生成自然流畅的语音</p>
+        
+        <!-- 模式切换 -->
+        <div class="mode-tabs">
+            <button class="mode-tab active" data-mode="single" onclick="switchMode('single')">单段模式</button>
+            <button class="mode-tab" data-mode="dialogue" onclick="switchMode('dialogue')">对话模式</button>
+            <button class="mode-tab" data-mode="merge" onclick="switchMode('merge')">音频拼接</button>
+        </div>
+        
+        <!-- 文本输入 -->
+        <div class="form-group">
+            <label for="text">文本内容</label>
+            <textarea id="text" placeholder="请输入要转换的中文文本...">陈明：王总您好，我是江苏银行南京江北支行客户经理陈明。今天按照授信尽职调查要求，对贵公司申请2026年度续授信进行访谈并录音，请您确认是否同意？
+王鹏：同意，没问题。我们合作两年了，流程都熟悉。</textarea>
+            <div class="char-count"><span id="charCount">0</span> / 3000</div>
+            <div class="hint" id="dialogueHint" style="display:none;">
+                格式要求：每行以 <code>姓名：</code> 开头，如 <code>陈明：你好</code>
+            </div>
+        </div>
+        
+        <!-- 对话模式人员配置 -->
+        <div class="speaker-config" id="speakerConfig">
+            <h3>对话人员配置</h3>
+            <div class="speaker-list" id="speakerList">
+                <!-- 动态生成 -->
+            </div>
+        </div>
+        
+        <!-- 音色选择（单段模式） -->
+        <div class="form-group" id="singleVoiceGroup">
+            <label>选择音色</label>
+            <div class="voice-options">
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceMale" value="male">
+                    <label for="voiceMale">
+                        <span class="icon">&#x1F464;</span>
+                        <span class="name">男声</span>
+                    </label>
+                </div>
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceFemale" value="female" checked>
+                    <label for="voiceFemale">
+                        <span class="icon">&#x1F469;</span>
+                        <span class="name">女声</span>
+                    </label>
+                </div>
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceBoy" value="boy">
+                    <label for="voiceBoy">
+                        <span class="icon">&#x1F466;</span>
+                        <span class="name">男生-少年</span>
+                    </label>
+                </div>
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceGirl" value="girl">
+                    <label for="voiceGirl">
+                        <span class="icon">&#x1F467;</span>
+                        <span class="name">女生-少年</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 音频拼接模式 -->
+        <div id="mergePanel" style="display:none;">
+            <div class="form-group">
+                <label>上传音频文件（至少2个 MP3）</label>
+                <div class="upload-area" id="uploadArea" onclick="document.getElementById('fileInput').click()">
+                    <input type="file" id="fileInput" multiple accept="audio/mpeg,audio/mp3" style="display:none;">
+                    <div class="upload-placeholder">
+                        <div style="font-size:36px; margin-bottom:8px;">&#x1F4C1;</div>
+                        <div>点击选择或拖拽 MP3 文件到此处</div>
+                        <div style="font-size:12px; color:#999; margin-top:6px;">支持多个文件，按列表顺序拼接</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-group" id="fileListGroup" style="display:none;">
+                <label>文件列表（拖拽可调整顺序）</label>
+                <div class="file-list" id="fileList"></div>
+            </div>
+            
+            <div class="form-group">
+                <label>段间停顿</label>
+                <select id="mergePause" style="padding:8px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; background:#fff;">
+                    <option value="0">无停顿</option>
+                    <option value="0.5">0.5 秒</option>
+                    <option value="1" selected>1 秒</option>
+                    <option value="1.5">1.5 秒</option>
+                    <option value="2">2 秒</option>
+                    <option value="3">3 秒</option>
+                </select>
+            </div>
+        </div>
+        
+        <button class="btn-generate" id="btnGenerate" onclick="generate()">生成语音</button>
+        
+        <div class="loading" id="loading">
+            <span class="spinner"></span>正在合成语音，请稍候...
+        </div>
+        
+        <div class="result" id="result">
+            <audio id="audioPlayer" controls></audio>
+            <a class="btn-download" id="btnDownload" href="#" download>下载音频</a>
+        </div>
+        
+        <div class="error" id="error"></div>
+    </div>
+    
+    <script>
+        let currentMode = 'single';
+        let speakerVoiceMap = {};
+        
+        const textArea = document.getElementById('text');
+        const charCount = document.getElementById('charCount');
+        const speakerConfig = document.getElementById('speakerConfig');
+        const speakerList = document.getElementById('speakerList');
+        const singleVoiceGroup = document.getElementById('singleVoiceGroup');
+        const dialogueHint = document.getElementById('dialogueHint');
+        const mergePanel = document.getElementById('mergePanel');
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const fileListEl = document.getElementById('fileList');
+        const fileListGroup = document.getElementById('fileListGroup');
+        const btnGenerate = document.getElementById('btnGenerate');
+        
+        let mergeFiles = [];  // 存储上传的文件对象
+        
+        function updateCharCount() {
+            charCount.textContent = textArea.value.length;
+        }
+        
+        textArea.addEventListener('input', function() {
+            updateCharCount();
+            if (currentMode === 'dialogue') {
+                parseSpeakers();
+            }
+        });
+        updateCharCount();
+        
+        function switchMode(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.mode-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.mode === mode);
+            });
+            
+            // 隐藏所有模式面板
+            singleVoiceGroup.style.display = 'none';
+            dialogueHint.style.display = 'none';
+            speakerConfig.classList.remove('show');
+            mergePanel.style.display = 'none';
+            textArea.parentElement.style.display = 'block';
+            
+            if (mode === 'dialogue') {
+                dialogueHint.style.display = 'block';
+                speakerConfig.classList.add('show');
+                parseSpeakers();
+                btnGenerate.textContent = '生成语音';
+            } else if (mode === 'merge') {
+                textArea.parentElement.style.display = 'none';
+                mergePanel.style.display = 'block';
+                btnGenerate.textContent = '合并音频';
+            } else {
+                singleVoiceGroup.style.display = 'block';
+                btnGenerate.textContent = '生成语音';
+            }
+        }
+        
+        // 默认音色列表，按顺序循环分配
+        const DEFAULT_VOICES = ['male', 'female', 'boy', 'girl'];
+        
+        // 解析文本中的说话人，动态生成配置行
+        function parseSpeakers() {
+            const text = textArea.value;
+            const lines = text.split(/\n/);
+            const speakers = [];
+            const seen = new Set();
+            
+            for (const line of lines) {
+                const match = line.match(/^(.+?)[\uff1a:](.+)$/);
+                if (match) {
+                    const name = match[1].trim();
+                    if (!seen.has(name)) {
+                        seen.add(name);
+                        speakers.push(name);
+                    }
+                }
+            }
+            
+            const error = document.getElementById('error');
+            const listEl = document.getElementById('speakerList');
+            
+            if (speakers.length === 0) {
+                listEl.innerHTML = '';
+                speakerConfig.classList.remove('show');
+                error.style.display = 'none';
+                error.classList.remove('show');
+                return;
+            }
+            
+            speakerConfig.classList.add('show');
+            
+            error.style.display = 'none';
+            error.classList.remove('show');
+            
+            // 获取当前已显示的所有原始说话人
+            const currentSpeakers = [];
+            document.querySelectorAll('.speaker-item').forEach(item => {
+                const originalName = item.dataset.speaker;
+                if (originalName) {
+                    currentSpeakers.push(originalName);
+                }
+            });
+            
+            // 如果说话人列表没有变化，不重新生成（保留用户手动修改的姓名）
+            const sameSet = currentSpeakers.length === speakers.length &&
+                speakers.every(s => currentSpeakers.includes(s));
+            if (sameSet) {
+                return;
+            }
+            
+            // 保持已有的音色选择
+            const existingVoices = {};
+            document.querySelectorAll('.speaker-item').forEach(item => {
+                const originalName = item.dataset.speaker;
+                const voice = item.querySelector('.speaker-voice-select').value;
+                if (originalName) {
+                    existingVoices[originalName] = voice;
+                }
+            });
+            
+            // 重新生成配置行
+            listEl.innerHTML = '';
+            speakers.forEach((name, idx) => {
+                const voice = existingVoices[name] || DEFAULT_VOICES[idx % DEFAULT_VOICES.length];
+                const item = document.createElement('div');
+                item.className = 'speaker-item';
+                item.dataset.speaker = name;
+                item.innerHTML = `
+                    <span class="speaker-name">人员${idx + 1}</span>
+                    <span class="speaker-name-display" style="padding:6px 10px; background:#f0f0f5; border-radius:8px; font-size:14px; min-width:80px; font-weight:500; color:#333;">${escapeHtml(name)}</span>
+                    <div class="speaker-voice">
+                        <select class="speaker-voice-select">
+                            <option value="male" ${voice === 'male' ? 'selected' : ''}>男声</option>
+                            <option value="female" ${voice === 'female' ? 'selected' : ''}>女声</option>
+                            <option value="boy" ${voice === 'boy' ? 'selected' : ''}>男生-少年</option>
+                            <option value="girl" ${voice === 'girl' ? 'selected' : ''}>女生-少年</option>
+                        </select>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        function formatSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        
+        function renderFileList() {
+            if (mergeFiles.length === 0) {
+                fileListGroup.style.display = 'none';
+                return;
+            }
+            fileListGroup.style.display = 'block';
+            fileListEl.innerHTML = '';
+            mergeFiles.forEach((file, idx) => {
+                const item = document.createElement('div');
+                item.className = 'file-item';
+                item.draggable = true;
+                item.dataset.index = idx;
+                item.innerHTML = `
+                    <span class="file-index">${idx + 1}</span>
+                    <span class="file-name">${escapeHtml(file.name)}</span>
+                    <span class="file-size">${formatSize(file.size)}</span>
+                    <button class="file-remove" onclick="removeFile(${idx})">删除</button>
+                `;
+                // 拖拽事件
+                item.addEventListener('dragstart', function(e) {
+                    item.classList.add('dragging');
+                    e.dataTransfer.setData('text/plain', idx);
+                });
+                item.addEventListener('dragend', function() {
+                    item.classList.remove('dragging');
+                });
+                item.addEventListener('dragover', function(e) {
+                    e.preventDefault();
+                });
+                item.addEventListener('drop', function(e) {
+                    e.preventDefault();
+                    const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+                    const toIdx = parseInt(item.dataset.index);
+                    if (fromIdx !== toIdx) {
+                        const file = mergeFiles.splice(fromIdx, 1)[0];
+                        mergeFiles.splice(toIdx, 0, file);
+                        renderFileList();
+                    }
+                });
+                fileListEl.appendChild(item);
+            });
+        }
+        
+        function removeFile(idx) {
+            mergeFiles.splice(idx, 1);
+            renderFileList();
+        }
+        
+        function handleFiles(files) {
+            for (const file of files) {
+                if (file.type !== 'audio/mpeg' && !file.name.toLowerCase().endsWith('.mp3')) {
+                    alert('仅支持 MP3 格式: ' + file.name);
+                    continue;
+                }
+                mergeFiles.push(file);
+            }
+            renderFileList();
+        }
+        
+        fileInput.addEventListener('change', function(e) {
+            handleFiles(e.target.files);
+            fileInput.value = '';
+        });
+        
+        uploadArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', function() {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+        
+        // 构建对话分段（按动态配置的所有人员匹配）
+        function buildSegments() {
+            const text = textArea.value;
+            const lines = text.split(/\n/);
+            const segments = [];
+            
+            // 收集所有人员配置（从 data-speaker 读取原始名称）
+            const speakerMap = {};
+            document.querySelectorAll('.speaker-item').forEach(item => {
+                const name = item.dataset.speaker;
+                const select = item.querySelector('.speaker-voice-select');
+                const voice = select.value;
+                if (name) {
+                    speakerMap[name] = voice;
+                }
+            });
+            
+            if (Object.keys(speakerMap).length === 0) {
+                throw new Error('请至少配置一个说话人');
+            }
+            
+            for (const line of lines) {
+                const lineTrim = line.trim();
+                if (!lineTrim) continue;
+                
+                const match = lineTrim.match(/^(.+?)[\uff1a:](.+)$/);
+                if (match) {
+                    const speaker = match[1].trim();
+                    const content = match[2].trim();
+                    
+                    if (speaker in speakerMap) {
+                        segments.push({ text: content, voice: speakerMap[speaker], speaker: speaker });
+                    }
+                    // 不在配置中的说话人自动忽略
+                }
+            }
+            
+            return segments;
+        }
+        
+        async function generate() {
+            const btn = document.getElementById('btnGenerate');
+            const loading = document.getElementById('loading');
+            const result = document.getElementById('result');
+            const error = document.getElementById('error');
+            
+            // 对话模式前置校验
+            if (currentMode === 'dialogue') {
+                const items = document.querySelectorAll('.speaker-item');
+                if (items.length === 0) {
+                    error.textContent = '未能解析到任何说话人，请检查文本格式（每行以"姓名：内容"开头）';
+                    error.classList.add('show');
+                    return;
+                }
+                
+                let segments;
+                try {
+                    segments = buildSegments();
+                } catch (err) {
+                    error.textContent = err.message;
+                    error.classList.add('show');
+                    return;
+                }
+                
+                if (segments.length === 0) {
+                    error.textContent = '未能匹配到任何对话内容，请检查：\n1. 人员姓名是否与文本中的名称一致\n2. 每行是否以"姓名：内容"格式书写';
+                    error.classList.add('show');
+                    return;
+                }
+            }
+            
+            // 音频拼接模式前置校验
+            if (currentMode === 'merge') {
+                if (mergeFiles.length < 2) {
+                    error.textContent = '请至少上传2个音频文件';
+                    error.classList.add('show');
+                    return;
+                }
+            }
+            
+            btn.disabled = true;
+            loading.classList.add('show');
+            result.classList.remove('show');
+            error.classList.remove('show');
+            
+            try {
+                let response;
+                
+                if (currentMode === 'single') {
+                    const text = textArea.value.trim();
+                    const voice = document.querySelector('input[name="voice"]:checked').value;
+                    
+                    if (!text) {
+                        throw new Error('请输入文本内容');
+                    }
+                    
+                    response = await fetch('/tts', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ text, voice })
+                    });
+                } else if (currentMode === 'dialogue') {
+                    const segments = buildSegments();
+                    
+                    response = await fetch('/tts_dialogue', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ segments })
+                    });
+                } else if (currentMode === 'merge') {
+                    const formData = new FormData();
+                    mergeFiles.forEach(file => formData.append('files', file));
+                    formData.append('pause', document.getElementById('mergePause').value);
+                    
+                    response = await fetch('/merge', {
+                        method: 'POST',
+                        body: formData
+                    });
+                }
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const audioUrl = '/audio/' + data.filename;
+                    document.getElementById('audioPlayer').src = audioUrl;
+                    document.getElementById('btnDownload').href = audioUrl;
+                    result.classList.add('show');
+                } else {
+                    throw new Error(data.error || '生成失败');
+                }
+            } catch (err) {
+                error.textContent = err.message;
+                error.classList.add('show');
+            } finally {
+                btn.disabled = false;
+                loading.classList.remove('show');
+            }
+        }
+        
+        // Ctrl+Enter 快速生成
+        textArea.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                generate();
+            }
+        });
+    </script>
+</body>
+</html>

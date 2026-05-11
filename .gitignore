@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# 生成的音频文件（保留目录）
+static/audio/*.mp3
+static/audio/*.wav
+static/audio/*.mpeg
+!static/audio/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

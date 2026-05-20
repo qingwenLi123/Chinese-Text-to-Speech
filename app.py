@@ -54,29 +54,41 @@ async def generate_speech(text: str, voice_type: str) -> str:
     raise RuntimeError(f"TTS生成失败(重试3次): {last_err}") from last_err
 
 
+async def _generate_one_segment(seg: dict, idx: int) -> str:
+    """生成单段音频，供并行调用"""
+    text = seg.get("text", "").strip()
+    voice = seg.get("voice", "female")
+    if not text:
+        return None
+    if voice not in VOICES:
+        voice = "female"  # 非法音色兜底
+    filepath = await generate_speech(text, voice)
+    return os.path.join(AUDIO_DIR, filepath)
+
+
 async def generate_dialogue(segments: list) -> str:
     """
-    生成对话语音，多段合并成一个文件
+    生成对话语音，多段合并成一个文件（并行生成各段）
     segments: [{"text": "...", "voice": "male"}, ...]
     """
-    # 分别生成每段音频
+    # 并行生成每段音频
+    tasks = [_generate_one_segment(seg, idx) for idx, seg in enumerate(segments)]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
     files = []
-    for idx, seg in enumerate(segments):
-        text = seg.get("text", "").strip()
-        voice = seg.get("voice", "female")
-        if not text:
-            continue
-        if voice not in VOICES:
-            voice = "female"  # 非法音色兜底
-        try:
-            filepath = await generate_speech(text, voice)
-            files.append(os.path.join(AUDIO_DIR, filepath))
-        except Exception as e:
-            # 清理已生成的临时文件
-            for f in files:
-                try: os.remove(f)
-                except: pass
-            raise RuntimeError(f"第{idx+1}段语音生成失败: {e}") from e
+    errors = []
+    for r in results:
+        if isinstance(r, Exception):
+            errors.append(r)
+        elif r:
+            files.append(r)
+    
+    # 如果有任何一段失败，清理已生成的文件
+    if errors:
+        for f in files:
+            try: os.remove(f)
+            except: pass
+        raise RuntimeError(f"对话生成失败: {errors[0]}")
     
     if not files:
         raise ValueError("没有有效的文本内容")

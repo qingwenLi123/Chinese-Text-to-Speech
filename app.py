@@ -31,16 +31,27 @@ VOICES = {
 
 
 async def generate_speech(text: str, voice_type: str) -> str:
-    """生成语音文件，返回文件路径"""
+    """生成语音文件，返回文件路径（带重试）"""
     if voice_type not in VOICES:
-        raise ValueError("不支持的音色")
+        raise ValueError(f"不支持的音色: {voice_type}")
     
     filename = f"{uuid.uuid4().hex}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
     
-    communicate = edge_tts.Communicate(text, VOICES[voice_type])
-    await communicate.save(filepath)
-    return filename
+    last_err = None
+    for attempt in range(3):
+        try:
+            communicate = edge_tts.Communicate(text, VOICES[voice_type])
+            await communicate.save(filepath)
+            return filename
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                await asyncio.sleep(1.5 * (attempt + 1))  # 递增延迟: 1.5s, 3s
+            else:
+                break
+    
+    raise RuntimeError(f"TTS生成失败(重试3次): {last_err}") from last_err
 
 
 async def generate_dialogue(segments: list) -> str:
@@ -50,13 +61,22 @@ async def generate_dialogue(segments: list) -> str:
     """
     # 分别生成每段音频
     files = []
-    for seg in segments:
+    for idx, seg in enumerate(segments):
         text = seg.get("text", "").strip()
         voice = seg.get("voice", "female")
         if not text:
             continue
-        filepath = await generate_speech(text, voice)
-        files.append(os.path.join(AUDIO_DIR, filepath))
+        if voice not in VOICES:
+            voice = "female"  # 非法音色兜底
+        try:
+            filepath = await generate_speech(text, voice)
+            files.append(os.path.join(AUDIO_DIR, filepath))
+        except Exception as e:
+            # 清理已生成的临时文件
+            for f in files:
+                try: os.remove(f)
+                except: pass
+            raise RuntimeError(f"第{idx+1}段语音生成失败: {e}") from e
     
     if not files:
         raise ValueError("没有有效的文本内容")
@@ -71,7 +91,9 @@ async def generate_dialogue(segments: list) -> str:
             "-acodec", "libmp3lame", "-q:a", "2",
             padded
         ]
-        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"ffmpeg静音处理失败: {result.stderr}")
         padded_files.append(padded)
     
     # 用 concat 滤镜合并所有音频
@@ -93,7 +115,9 @@ async def generate_dialogue(segments: list) -> str:
         "-acodec", "libmp3lame", "-q:a", "2",
         merged_path
     ]
-    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"ffmpeg合并失败: {result.stderr}")
     
     # 清理临时文件
     for f in files + padded_files:
@@ -131,6 +155,11 @@ def tts():
             "voice": "男声" if voice_type == "male" else "女声"
         })
     except Exception as e:
+        import traceback
+        print("=" * 60)
+        print(f"[ERROR] tts_dialogue 异常: {e}")
+        print(traceback.format_exc())
+        print("=" * 60)
         return jsonify({"success": False, "error": str(e)}), 500
 
 

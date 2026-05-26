@@ -58,9 +58,8 @@ FILLERS = ["嗯...", "啊...", "那个...", "呃...", "这个..."]
 
 def humanize_text(text: str) -> str:
     """
-    将标准文本转换为带 SSML 的真人化口语文本
-    功能：口语化替换 + 填充词 + 随机重复 + SSML 停顿
-    （注：Edge-TTS 对 <prosody rate/pitch> 支持不稳定，只使用 <break>）
+    纯文本真人化（Edge-TTS 不支持任何 SSML 标签）
+    效果：口语化替换 + 填充词 + 标点停顿增强
     """
     result = text
     
@@ -69,28 +68,21 @@ def humanize_text(text: str) -> str:
         if key in result and random.random() < 0.3:
             result = result.replace(key, random.choice(choices), 1)
     
-    # 阶段 2：句首填充词（20% 概率）
-    if random.random() < 0.2:
+    # 阶段 2：句首填充词（10% 概率）
+    if random.random() < 0.1:
         result = random.choice(FILLERS) + result
     
-    # 阶段 3：随机重复单字（模拟口吃/强调，10% 概率）
-    result = re.sub(
-        r'([我你他她它])',
-        lambda m: m.group(1) * 2 if random.random() < 0.1 else m.group(1),
-        result
-    )
-    
-    # 阶段 4：纯文本停顿模拟（Edge-TTS 不支持 <break> SSML 标签）
-    # 逗号后 40% 概率加省略号，模拟迟疑/换气停顿
+    # 阶段 3：停顿增强（纯文本方式，用逗号/句号堆叠模拟停顿）
+    # 逗号后 30% 概率加额外逗号，制造迟疑感
     result = re.sub(
         r'，',
-        lambda m: '，……' if random.random() < 0.4 else '，',
+        lambda m: '，，' if random.random() < 0.3 else '，',
         result
     )
-    # 句号/问号/叹号后 50% 概率加省略号，模拟思考停顿
+    # 句号/问号/叹号后 30% 概率加省略号，制造思考停顿
     result = re.sub(
         r'([。！？])',
-        lambda m: m.group(1) + '……' if random.random() < 0.5 else m.group(1),
+        lambda m: m.group(1) + '……' if random.random() < 0.3 else m.group(1),
         result
     )
     

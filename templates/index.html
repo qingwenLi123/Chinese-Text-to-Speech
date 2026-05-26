@@ -345,6 +345,112 @@
         .file-remove:hover {
             background: #ffdddd;
         }
+        /* 噪音模式配置 */
+        .noise-config {
+            display: none;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f8f9ff;
+            border-radius: 12px;
+        }
+        .noise-config.show { display: block; }
+        .noise-config h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .noise-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .noise-type-select {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            background: #fff;
+            cursor: pointer;
+        }
+        .noise-volume-wrap {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .noise-volume-wrap label {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 0;
+        }
+        .noise-volume-slider {
+            width: 100%;
+            accent-color: #667eea;
+        }
+        .noise-volume-value {
+            font-size: 13px;
+            color: #667eea;
+            min-width: 40px;
+            text-align: right;
+            font-weight: 600;
+        }
+        /* 真人模式配置 */
+        .real-mode-config {
+            display: none;
+            margin-bottom: 20px;
+            padding: 16px;
+            background: #f8f9ff;
+            border-radius: 12px;
+        }
+        .real-mode-config.show { display: block; }
+        .real-mode-config h3 {
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .toggle-switch {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            color: #555;
+            cursor: pointer;
+        }
+        .toggle-switch input {
+            display: none;
+        }
+        .toggle-slider {
+            position: relative;
+            width: 44px;
+            height: 24px;
+            background: #ccc;
+            border-radius: 24px;
+            transition: background 0.3s;
+            flex-shrink: 0;
+        }
+        .toggle-slider::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: #667eea;
+        }
+        .toggle-switch input:checked + .toggle-slider::after {
+            transform: translateX(20px);
+        }
+        .real-mode-desc {
+            font-size: 12px;
+            color: #888;
+            margin-top: 8px;
+            line-height: 1.5;
+        }
     </style>
 </head>
 <body>
@@ -378,6 +484,35 @@
             </div>
         </div>
         
+        <!-- 噪音模式配置 -->
+        <div class="noise-config" id="noiseConfig">
+            <h3>环境噪音</h3>
+            <div class="noise-row">
+                <select id="noiseType" class="noise-type-select">
+                    <option value="none">关闭</option>
+                    <option value="pink">粉噪音（推荐）</option>
+                    <option value="white">白噪音</option>
+                    <option value="brown">棕噪音</option>
+                </select>
+                <div class="noise-volume-wrap">
+                    <label>音量</label>
+                    <input type="range" id="noiseVolume" class="noise-volume-slider" min="0" max="100" value="30">
+                </div>
+                <span class="noise-volume-value" id="noiseVolumeValue">30%</span>
+            </div>
+        </div>
+        
+        <!-- 真人模式配置 -->
+        <div class="real-mode-config" id="realModeConfig">
+            <h3>真人模式</h3>
+            <label class="toggle-switch">
+                <input type="checkbox" id="realMode">
+                <span class="toggle-slider"></span>
+                开启真人模式
+            </label>
+            <p class="real-mode-desc">模拟自然停顿、口语化表达、情绪起伏，让对话更像真人交谈</p>
+        </div>
+        
         <!-- 音色选择（单段模式） -->
         <div class="form-group" id="singleVoiceGroup">
             <label>选择音色</label>
@@ -408,6 +543,52 @@
                     <label for="voiceGirl">
                         <span class="icon">&#x1F467;</span>
                         <span class="name">女生-少年</span>
+                    </label>
+                </div>
+            </div>
+            <div class="voice-options" style="margin-top: 10px;">
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceCantoneseM" value="cantonese_male">
+                    <label for="voiceCantoneseM">
+                        <span class="icon">&#x1F1ED;&#x1F1F0;</span>
+                        <span class="name">粤语男</span>
+                    </label>
+                </div>
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceCantoneseF" value="cantonese_female">
+                    <label for="voiceCantoneseF">
+                        <span class="icon">&#x1F1ED;&#x1F1F0;</span>
+                        <span class="name">粤语女</span>
+                    </label>
+                </div>
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceDongbei" value="dongbei">
+                    <label for="voiceDongbei">
+                        <span class="icon">&#x2744;&#xFE0F;</span>
+                        <span class="name">东北话</span>
+                    </label>
+                </div>
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceShaanxi" value="shaanxi">
+                    <label for="voiceShaanxi">
+                        <span class="icon">&#x1F3DB;&#xFE0F;</span>
+                        <span class="name">陕西话</span>
+                    </label>
+                </div>
+            </div>
+            <div class="voice-options" style="margin-top: 10px;">
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceTaiwanM" value="taiwan_male">
+                    <label for="voiceTaiwanM">
+                        <span class="icon">&#x1F3F4;&#xE0067;&#xE0062;&#xE0074;&#xE0077;</span>
+                        <span class="name">台湾男</span>
+                    </label>
+                </div>
+                <div class="voice-option">
+                    <input type="radio" name="voice" id="voiceTaiwanF" value="taiwan_female">
+                    <label for="voiceTaiwanF">
+                        <span class="icon">&#x1F3F4;&#xE0067;&#xE0062;&#xE0074;&#xE0077;</span>
+                        <span class="name">台湾女</span>
                     </label>
                 </div>
             </div>
@@ -475,6 +656,12 @@
         const fileListEl = document.getElementById('fileList');
         const fileListGroup = document.getElementById('fileListGroup');
         const btnGenerate = document.getElementById('btnGenerate');
+        const noiseConfig = document.getElementById('noiseConfig');
+        const noiseType = document.getElementById('noiseType');
+        const noiseVolume = document.getElementById('noiseVolume');
+        const noiseVolumeValue = document.getElementById('noiseVolumeValue');
+        const realModeConfig = document.getElementById('realModeConfig');
+        const realMode = document.getElementById('realMode');
         
         let mergeFiles = [];  // 存储上传的文件对象
         
@@ -506,6 +693,8 @@
             if (mode === 'dialogue') {
                 dialogueHint.style.display = 'block';
                 speakerConfig.classList.add('show');
+                noiseConfig.classList.add('show');
+                realModeConfig.classList.add('show');
                 parseSpeakers();
                 btnGenerate.textContent = '生成语音';
             } else if (mode === 'merge') {
@@ -593,10 +782,20 @@
                     <span class="speaker-name-display" style="padding:6px 10px; background:#f0f0f5; border-radius:8px; font-size:14px; min-width:80px; font-weight:500; color:#333;">${escapeHtml(name)}</span>
                     <div class="speaker-voice">
                         <select class="speaker-voice-select">
-                            <option value="male" ${voice === 'male' ? 'selected' : ''}>男声</option>
-                            <option value="female" ${voice === 'female' ? 'selected' : ''}>女声</option>
-                            <option value="boy" ${voice === 'boy' ? 'selected' : ''}>男生-少年</option>
-                            <option value="girl" ${voice === 'girl' ? 'selected' : ''}>女生-少年</option>
+                            <optgroup label="普通话">
+                                <option value="male" ${voice === 'male' ? 'selected' : ''}>男声</option>
+                                <option value="female" ${voice === 'female' ? 'selected' : ''}>女声</option>
+                                <option value="boy" ${voice === 'boy' ? 'selected' : ''}>男生-少年</option>
+                                <option value="girl" ${voice === 'girl' ? 'selected' : ''}>女生-少年</option>
+                            </optgroup>
+                            <optgroup label="方言">
+                                <option value="cantonese_male" ${voice === 'cantonese_male' ? 'selected' : ''}>粤语男声</option>
+                                <option value="cantonese_female" ${voice === 'cantonese_female' ? 'selected' : ''}>粤语女声</option>
+                                <option value="dongbei" ${voice === 'dongbei' ? 'selected' : ''}>东北话</option>
+                                <option value="shaanxi" ${voice === 'shaanxi' ? 'selected' : ''}>陕西话</option>
+                                <option value="taiwan_male" ${voice === 'taiwan_male' ? 'selected' : ''}>台湾腔男声</option>
+                                <option value="taiwan_female" ${voice === 'taiwan_female' ? 'selected' : ''}>台湾腔女声</option>
+                            </optgroup>
                         </select>
                     </div>
                 `;
@@ -802,7 +1001,12 @@
                     response = await fetch('/tts_dialogue', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ segments })
+                        body: JSON.stringify({
+                            segments,
+                            noise: noiseType.value,
+                            noise_volume: parseInt(noiseVolume.value) / 100,
+                            real_mode: realMode.checked
+                        })
                     });
                 } else if (currentMode === 'merge') {
                     const formData = new FormData();
@@ -833,6 +1037,11 @@
                 loading.classList.remove('show');
             }
         }
+        
+        // 噪音音量滑块事件
+        noiseVolume.addEventListener('input', function() {
+            noiseVolumeValue.textContent = this.value + '%';
+        });
         
         // Ctrl+Enter 快速生成
         textArea.addEventListener('keydown', function(e) {

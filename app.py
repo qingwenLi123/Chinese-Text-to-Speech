@@ -8,6 +8,8 @@ import os
 import uuid
 import time
 import subprocess
+import re
+import random
 from flask import Flask, render_template, request, jsonify, send_file
 import edge_tts
 from imageio_ffmpeg import get_ffmpeg_exe
@@ -21,19 +23,88 @@ FFMPEG = get_ffmpeg_exe()
 AUDIO_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "audio")
 os.makedirs(AUDIO_DIR, exist_ok=True)
 
-# 中文语音配置
+# 中文语音配置（含方言）
 VOICES = {
+    # 普通话
     "male": "zh-CN-YunjianNeural",       # 男声
     "female": "zh-CN-XiaoxiaoNeural",    # 女声
     "boy": "zh-CN-YunxiNeural",          # 男生-少年
     "girl": "zh-CN-XiaoyiNeural",        # 女生-少年
+    # 方言
+    "cantonese_male": "zh-HK-WanLungNeural",       # 粤语男声
+    "cantonese_female": "zh-HK-HiuGaaiNeural",     # 粤语女声
+    "dongbei": "zh-CN-liaoning-XiaobeiNeural",     # 东北话
+    "shaanxi": "zh-CN-shaanxi-XiaoniNeural",       # 陕西话
+    "taiwan_male": "zh-TW-YunJheNeural",           # 台湾腔男声
+    "taiwan_female": "zh-TW-HsiaoYuNeural",        # 台湾腔女声
 }
 
+# 口语化替换规则（概率触发）
+SPOKEN_REPLACEMENTS = {
+    "好的": ["好嘞", "行", "成啊", "好的好的"],
+    "什么": ["啥", "什么呀"],
+    "这个": ["这个嘛", "这个...这个"],
+    "那个": ["那个...那个", "那个嘛"],
+    "不是": ["不是不是", "不是啊"],
+    "就是": ["就是就是"],
+    "知道": ["知道知道"],
+    "明白": ["明白明白"],
+    "可以": ["可以可以", "没问题没问题"],
+    "谢谢": ["谢了", "谢谢啊"],
+}
 
-async def generate_speech(text: str, voice_type: str) -> str:
-    """生成语音文件，返回文件路径（带重试）"""
+FILLERS = ["嗯...", "啊...", "那个...", "呃...", "这个..."]
+
+
+def humanize_text(text: str) -> str:
+    """
+    将标准文本转换为带 SSML 的真人化口语文本
+    功能：口语化替换 + 填充词 + 随机重复 + SSML 停顿
+    （注：Edge-TTS 对 <prosody rate/pitch> 支持不稳定，只使用 <break>）
+    """
+    result = text
+    
+    # 阶段 1：口语化文本替换（每条规则最多触发一次，30% 概率）
+    for key, choices in SPOKEN_REPLACEMENTS.items():
+        if key in result and random.random() < 0.3:
+            result = result.replace(key, random.choice(choices), 1)
+    
+    # 阶段 2：句首填充词（20% 概率）
+    if random.random() < 0.2:
+        result = random.choice(FILLERS) + result
+    
+    # 阶段 3：随机重复单字（模拟口吃/强调，10% 概率）
+    result = re.sub(
+        r'([我你他她它])',
+        lambda m: m.group(1) * 2 if random.random() < 0.1 else m.group(1),
+        result
+    )
+    
+    # 阶段 4：纯文本停顿模拟（Edge-TTS 不支持 <break> SSML 标签）
+    # 逗号后 40% 概率加省略号，模拟迟疑/换气停顿
+    result = re.sub(
+        r'，',
+        lambda m: '，……' if random.random() < 0.4 else '，',
+        result
+    )
+    # 句号/问号/叹号后 50% 概率加省略号，模拟思考停顿
+    result = re.sub(
+        r'([。！？])',
+        lambda m: m.group(1) + '……' if random.random() < 0.5 else m.group(1),
+        result
+    )
+    
+    return result
+
+
+async def generate_speech(text: str, voice_type: str, real_mode: bool = False) -> str:
+    """生成语音文件，返回文件路径（带重试）。real_mode=True 时启用真人模式"""
     if voice_type not in VOICES:
         raise ValueError(f"不支持的音色: {voice_type}")
+    
+    # 真人模式：文本真人化 + SSML
+    if real_mode:
+        text = humanize_text(text)
     
     filename = f"{uuid.uuid4().hex}.mp3"
     filepath = os.path.join(AUDIO_DIR, filename)
@@ -54,25 +125,25 @@ async def generate_speech(text: str, voice_type: str) -> str:
     raise RuntimeError(f"TTS生成失败(重试3次): {last_err}") from last_err
 
 
-async def _generate_one_segment(seg: dict, idx: int) -> str:
-    """生成单段音频，供并行调用"""
+async def _generate_one_segment(seg: dict, idx: int, real_mode: bool = False) -> str:
+    """生成单段音频，供并行调用。real_mode=True 时启用真人模式"""
     text = seg.get("text", "").strip()
     voice = seg.get("voice", "female")
     if not text:
         return None
     if voice not in VOICES:
         voice = "female"  # 非法音色兜底
-    filepath = await generate_speech(text, voice)
+    filepath = await generate_speech(text, voice, real_mode=real_mode)
     return os.path.join(AUDIO_DIR, filepath)
 
 
-async def generate_dialogue(segments: list) -> str:
+async def generate_dialogue(segments: list, noise_type: str = "none", noise_volume: float = 0.3, real_mode: bool = False) -> str:
     """
-    生成对话语音，多段合并成一个文件（并行生成各段）
+    生成对话语音，多段合并成一个文件（并行生成各段），可选叠加环境噪音、真人模式
     segments: [{"text": "...", "voice": "male"}, ...]
     """
-    # 并行生成每段音频
-    tasks = [_generate_one_segment(seg, idx) for idx, seg in enumerate(segments)]
+    # 并行生成每段音频，传入 real_mode
+    tasks = [_generate_one_segment(seg, idx, real_mode=real_mode) for idx, seg in enumerate(segments)]
     results = await asyncio.gather(*tasks, return_exceptions=True)
     
     files = []
@@ -131,6 +202,46 @@ async def generate_dialogue(segments: list) -> str:
     if result.returncode != 0:
         raise RuntimeError(f"ffmpeg合并失败: {result.stderr}")
     
+    # 如果启用了环境噪音，叠加噪音层
+    if noise_type != "none":
+        valid_noises = {"white": "white", "pink": "pink", "brown": "brown"}
+        if noise_type not in valid_noises:
+            # 清理临时文件
+            for f in files + padded_files:
+                try: os.remove(f)
+                except: pass
+            try: os.remove(merged_path)
+            except: pass
+            raise ValueError(f"不支持的噪音类型: {noise_type}")
+        
+        mixed_filename = f"dialogue_{uuid.uuid4().hex}.mp3"
+        mixed_path = os.path.join(AUDIO_DIR, mixed_filename)
+        
+        noise_color = valid_noises[noise_type]
+        # 生成长噪音（600秒足够覆盖任何对话），amix=duration=first 自动截断到对话长度
+        cmd = [
+            FFMPEG, "-y",
+            "-i", merged_path,
+            "-f", "lavfi", "-i", f"anoisesrc=a={noise_volume}:d=600:c={noise_color}",
+            "-filter_complex", f"[1:a]volume={noise_volume}[noise];[0:a][noise]amix=inputs=2:duration=first:dropout_transition=0",
+            "-acodec", "libmp3lame", "-q:a", "2",
+            mixed_path
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            # 清理临时文件
+            for f in files + padded_files:
+                try: os.remove(f)
+                except: pass
+            try: os.remove(merged_path)
+            except: pass
+            raise RuntimeError(f"ffmpeg噪音叠加失败: {result.stderr}")
+        
+        # 删除旧的合并文件，返回叠加噪音后的新文件
+        try: os.remove(merged_path)
+        except: pass
+        return mixed_filename
+    
     # 清理临时文件
     for f in files + padded_files:
         try:
@@ -186,9 +297,12 @@ def serve_audio(filename):
 
 @app.route("/tts_dialogue", methods=["POST"])
 def tts_dialogue():
-    """对话模式：多段文本合并成一个音频"""
+    """对话模式：多段文本合并成一个音频，可选叠加环境噪音"""
     data = request.get_json()
     segments = data.get("segments", [])
+    noise_type = data.get("noise", "none")
+    noise_volume = data.get("noise_volume", 0.3)
+    real_mode = data.get("real_mode", False)
     
     if not segments or not isinstance(segments, list):
         return jsonify({"success": False, "error": "请提供对话分段数据"}), 400
@@ -198,8 +312,18 @@ def tts_dialogue():
     if total_chars > 5000:
         return jsonify({"success": False, "error": "文本过长，总字数请控制在 5000 字以内"}), 400
     
+    # 校验噪音参数
+    if noise_type not in ("none", "white", "pink", "brown"):
+        return jsonify({"success": False, "error": "不支持的噪音类型"}), 400
     try:
-        filename = asyncio.run(generate_dialogue(segments))
+        noise_volume = float(noise_volume)
+        if not (0 <= noise_volume <= 1):
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "噪音音量需在 0~1 之间"}), 400
+    
+    try:
+        filename = asyncio.run(generate_dialogue(segments, noise_type, noise_volume, real_mode))
         return jsonify({
             "success": True,
             "filename": filename,
